@@ -1,0 +1,790 @@
+---
+title: |
+  Energía sin fronteras: 
+  España y su Papel en el Mapa Energético Europeo
+author: "Autor: Alejandro Hernández Salmerón"
+date: "Junio 2024"
+output:
+  html_document:
+    highlight: default
+    number_sections: false
+    theme: cosmo
+    toc: true
+    toc_depth: 2
+    css: styles.css
+  pdf_document:
+    highlight: zenburn
+    toc: true
+  word_document: default
+---
+
+![](header.jpg){width=100%}
+<br><br>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+
+```{r message= FALSE, warning=FALSE, include=FALSE}
+if (!require('circlize')) install.packages('circlize')
+library(Stat2Data)
+
+if (!require('ggplot2')) install.packages('ggplot2')
+library(ggplot2)
+
+if (!require('dplyr')) install.packages('dplyr')
+library(dplyr)
+
+if (!require('tidyr')) install.packages('tidyr')
+library(tidyr)
+
+if (!require('waffle')) install.packages('waffle')
+library(waffle)
+
+if (!require('dplyr')) install.packages('dplyr')
+library(dplyr)
+
+if (!require('magrittr')) install.packages('magrittr')
+library(magrittr)
+
+if (!require('sf')) install.packages('sf')
+library(sf)
+
+if (!require('gganimate')) install.packages('gganimate')
+library(gganimate)
+
+if (!require('plotly')) install.packages('plotly')
+library(plotly)
+
+if (!require('readr')) install.packages('readr')
+library(readr)
+
+if (!require('shiny')) install.packages('shiny')
+library(shiny)
+
+if (!require('lubridate')) install.packages('lubridate')
+library(lubridate)
+
+if (!require('zoo')) install.packages('zoo')
+library(zoo)
+
+if (!require('htmlwidgets')) install.packages('htmlwidgets')
+library(htmlwidgets)
+
+if (!require('reshape2')) install.packages('reshape2')
+library(reshape2)
+
+if (!require('shinyWidgets')) install.packages('shinyWidgets')
+library(shinyWidgets)
+
+if (!require('networkD3')) install.packages('networkD3')
+library(networkD3)
+
+if (!require('treemap')) install.packages('treemap')
+library(treemap)
+
+
+
+
+
+```
+
+
+<span class="section"> Introducción </span>
+
+El objetivo principal de este artículo es **analizar la generación y consumo de energía en España, identificando patrones y relaciones clave que nos permitan entender mejor el presente y planificar un futuro más eficiente y sostenible**.
+A lo largo de este storytelling, exploraremos cómo varía la generación de energía en diferentes tecnologías, la relación entre las condiciones meteorológicas y la producción de energía, la influencia de la capacidad instalada y la distribución de esta capacidad entre las tecnologías.
+
+Esta visualizacion intentará dar respuesta a las siguientes preguntas:
+
++ ¿Cómo ha variado la generación de energía eléctrica a lo largo de los últimos años?
+
++ ¿Cuál es la relación entre las condiciones meteorológicas y el precio del mercado de energía en España?
+
++ ¿Cómo se distrubuiye la generación energética?
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+energy_dataset<-read.csv("./energy_dataset.csv",header=T,sep=",")
+```
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+str(energy_dataset)
+```
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+head(energy_dataset)
+```
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+summary(energy_dataset)
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+energy_dataset$time_no_tz <- sub("\\+.*", "", energy_dataset$time)
+print(head(energy_dataset$time_no_tz, 10))
+str(energy_dataset)
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Convertir la columna sin timezone usando lubridate
+energy_dataset$time_converted <- ymd_hms(energy_dataset$time_no_tz)
+print(head(energy_dataset$time_converted, 10))
+
+# Verificar la estructura del dataset
+str(energy_dataset)
+```
+
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Filtrar filas con valores finitos en 'time_converted' y 'generation.biomass'
+filtered_data <- energy_dataset[!is.na(energy_dataset$time_converted) & !is.na(energy_dataset$generation.biomass), ]
+```
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Contar valores nulos por columna
+colSums(is.na(energy_dataset))
+
+# Imputar valores nulos o eliminarlos
+# Ejemplo: Imputar con la mediana
+energy_dataset$column_name[is.na(energy_dataset$column_name)] <- median(energy_dataset$column_name, na.rm = TRUE)
+```
+
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+summary(energy_dataset)
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Obtener los nombres de las columnas que contienen "generation"
+generation_columns <- grep("generation", names(energy_dataset), value = TRUE)
+
+# Verificar y mostrar las columnas identificadas
+print(generation_columns)
+
+# Reemplazar valores nulos en todas las columnas de generación
+for (column in generation_columns) {
+  if (all(is.na(energy_dataset[[column]]))) {
+    # Si toda la columna es NA, no podemos hacer el reemplazo con locf
+    warning(paste("La columna", column, "contiene solo NAs y no puede ser procesada."))
+  } else {
+    energy_dataset[[column]] <- na.locf(energy_dataset[[column]], fromLast = TRUE, na.rm = FALSE)
+  }
+}
+
+# Verificar que los valores nulos hayan sido reemplazados
+sapply(energy_dataset[generation_columns], function(x) sum(is.na(x)))
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Filtrar filas con valores finitos en 'time_converted'
+filtered_data <- energy_dataset[!is.na(energy_dataset$time_converted), ]
+```
+
+
+
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+df_ngc<-read.csv("./national_generation_capacity_stacked.csv",header=T,sep=",")
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+str(df_ngc)
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+summary(df_ngc)
+```
+
+
+
+
+```{r message= FALSE, warning=FALSE, include=FALSE}
+# Mostrar las primeras filas del dataset
+head(df_ngc)
+
+# Inspeccionar la estructura del dataset
+str(df_ngc)
+
+# Mostrar los nombres de las columnas
+colnames(df_ngc)
+
+# Suponiendo que la columna de fecha se llama 'Date'
+# Si no existe, ajusta este nombre según corresponda
+# Convertir la columna de fecha si es necesario
+# df_ngc$year <- as.year(df_ngc$year, format="%Y")
+
+# Contar valores nulos por columna
+colSums(is.na(df_ngc))
+
+# Manejar valores nulos en la columna 'Capacity' (por ejemplo, imputar con la mediana)
+df_ngc$capacity[is.na(df_ngc$capacity)] <- median(df_ngc$capacity, na.rm = TRUE)
+
+# Verificar nuevamente la estructura del dataset
+str(df_ngc)
+
+# Descripción estadística del dataset
+summary(df_ngc)
+
+# Crear una gráfica de barras apiladas para mostrar la capacidad de generación por tecnología y país
+ggplot(df_ngc, aes(fill=technology, y=capacity, x=country)) +
+  geom_bar(position="stack", stat="identity") +
+  labs(title = "Capacidad de Generación por Tecnología y País",
+       x = "País", y = "Capacidad (MW)")
+```
+
+
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+
+# Descripción estadística del dataset
+summary(df_ngc)
+```
+
+
+
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+df_sem<-read.csv("./spain_energy_market.csv",header=T,sep=",")
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+str(df_sem)
+```
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Inspeccionar la estructura del dataset
+summary(df_sem)
+
+```
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Mostrar las primeras filas del dataset
+head(df_sem)
+
+# Contar valores nulos por columna
+colSums(is.na(df_sem))
+
+# Manejar valores nulos en la columna 'value' (por ejemplo, imputar con la mediana)
+df_sem$value[is.na(df_sem$value)] <- median(df_sem$value, na.rm = TRUE)
+
+# Convertir la columna de fecha si es necesario
+df_sem$datetime <- as.POSIXct(df_sem$datetime, format="%Y-%m-%d %H:%M:%S")
+
+```
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Crear una gráfica de línea para mostrar la evolución del valor en el tiempo
+ggplot(df_sem, aes(x=datetime, y=value)) +
+  geom_line(color="blue") +
+  labs(title = "Evolución del Valor en el Tiempo",
+       x = "Fecha", y = "Valor")
+```
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+df_w<-read.csv("./weather_features.csv",header=T,sep=",")
+```
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+str(df_w)
+```
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Mostrar las primeras filas del dataset
+head(df_w)
+
+```
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+
+# Contar valores nulos por columna
+colSums(is.na(df_w))
+
+
+```
+
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Manejar valores nulos en las columnas necesarias (por ejemplo, imputar con la mediana)
+df_w$temp[is.na(df_w$temp)] <- median(df_w$temp, na.rm = TRUE)
+
+# Convertir la columna de fecha si es necesario
+df_w$dt_iso <- as.POSIXct(df_w$dt_iso, format="%Y-%m-%d %H:%M:%S")
+
+```
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Descripción estadística del dataset
+summary(df_w)
+```
+
+
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+# Crear una gráfica de línea para mostrar la evolución de la temperatura en el tiempo
+ggplot(df_w, aes(x=dt_iso, y=temp)) +
+  geom_line(color="blue") +
+  labs(title = "Evolución de la Temperatura en el Tiempo",
+       x = "Fecha", y = "Temperatura (K)")
+```
+
+<br><hr><br>
+
+
+<span class="section"> Evolución de la producción de energía en la UE</span>
+
+
+Se va a comenzar analizando la evolución de la generación de energía según el tipo de producción en los países de la Unión Europea. Esta visualización nos muestra **cómo ha cambiado la generación de energía a lo largo del tiempo**, permitiendonos identificar tendencias y cambios significativos.
+
+Este gráfico revela el **aumento sostenido de las energías renovables, como la eólica y la solar, y la disminución gradual de la dependencia de los combustibles fósiles**. Esto no solo refleja una transicion hacia fuentes más sostenibles, sino también los esfuerzos políticos y económicos para diversificar el mix energético del país.
+
+<br>
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=15, fig.height=10}
+# Filtrar y preparar los datos
+df_ngc_filtered <- df_ngc %>%
+  filter(!is.na(year) & !is.na(capacity) & !is.na(technology) & !is.na(country))
+
+# Crear el gráfico de líneas interactivo
+p1 <- ggplot(df_ngc_filtered, aes(x=year, y=capacity, color=technology, group=technology)) +
+  geom_line() +
+  facet_wrap(~ country) +
+  labs(title = "Evolución de la Generación de Energía por País y Tecnología",
+       x = "Fecha", y = "Capacidad (MW)") +
+  theme_minimal()
+
+# Convertir a objeto plotly para interactividad
+p1_interactive <- ggplotly(p1)
+
+# Mostrar el gráfico interactivo
+p1_interactive
+```
+
+
+
+
+
+
+```{r message= FALSE, warning=FALSE, include=FALSE}
+# Guardar la visualización interactiva como HTML
+saveWidget(p1_interactive, "Plot1_Evolucion_Generacion_Energia.html")
+```
+
+
+
+
+```{r eval=FALSE, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+# Verificar las columnas disponibles
+str(df_ngc)
+
+# Asegurarse de que la columna `date` es de tipo Date
+df_ngc$date <- as.Date(df_ngc$date)
+
+# Filtrar y preparar los datos para la visualización
+df_ngc_filtered <- df_ngc %>%
+  filter(!is.na(date) & !is.na(capacity) & !is.na(technology) & !is.na(country))
+
+# Verificar que los datos estén correctos
+head(df_ngc_filtered)
+summary(df_ngc_filtered)
+
+```
+
+
+```{r eval=FALSE, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Interfaz de Usuario
+ui <- fluidPage(
+  titlePanel("Evolución de la Generación de Energía por País y Tecnología"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("country", "Selecciona un País:",
+                  choices = c("Todos", unique(df_ngc_filtered$country)))
+    ),
+    mainPanel(
+      plotlyOutput("plot")
+    )
+  )
+)
+
+```
+
+
+```{r eval=FALSE, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+# Asegurarse de que la columna `date` es de tipo Date
+df_ngc$date <- as.Date(df_ngc$date)
+
+# Filtrar y preparar los datos para la visualización
+df_ngc_filtered <- df_ngc %>%
+  filter(!is.na(date) & !is.na(capacity) & !is.na(technology) & !is.na(country))
+
+# Servidor
+server <- function(input, output) {
+  output$plot <- renderPlotly({
+    filtered_data <- if (input$country == "Todos") {
+      df_ngc_filtered
+    } else {
+      df_ngc_filtered %>% filter(country == input$country)
+    }
+    
+    p1 <- ggplot(filtered_data, aes(x=date, y=capacity, color=technology, group=technology)) +
+      geom_line() +
+      labs(title = paste("Evolución de la Generación de Energía en", input$country),
+           x = "Fecha", y = "Capacidad (MW)") +
+      theme_minimal()
+    
+    ggplotly(p1)
+  })
+}
+
+# Ejecutar la aplicación Shiny
+shinyApp(ui = ui, server = server)
+```
+
+
+
+```{r eval=FALSE, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+# Asegurarse de que la columna `date` es de tipo Date
+df_ngc$date <- as.Date(df_ngc$date)
+
+# Filtrar y preparar los datos para la visualización
+df_ngc_filtered <- df_ngc %>%
+  filter(!is.na(date) & !is.na(capacity) & !is.na(technology) & !is.na(country))
+
+# UI de la aplicación
+ui <- fluidPage(
+  titlePanel("Evolución de la Generación de Energía por País y Tecnología"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("country", "Selecciona un País:",
+                  choices = c("Todos", unique(df_ngc_filtered$country)))
+    ),
+    mainPanel(
+      plotlyOutput("plot")
+    )
+  )
+)
+
+# Servidor de la aplicación
+server <- function(input, output) {
+  output$plot <- renderPlotly({
+    filtered_data <- if (input$country == "Todos") {
+      df_ngc_filtered
+    } else {
+      df_ngc_filtered %>% filter(country == input$country)
+    }
+
+    p1 <- ggplot(filtered_data, aes(x=date, y=capacity, color=technology, group=technology)) +
+      geom_line() +
+      labs(title = paste("Evolución de la Generación de Energía en", input$country),
+           x = "Fecha", y = "Capacidad (MW)") +
+      theme_minimal()
+
+    ggplotly(p1)
+  })
+}
+
+# Ejecutar la aplicación Shiny
+shinyApp(ui = ui, server = server)
+```
+
+```{r eval=FALSE, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+# Asegurarse de que la columna `date` es de tipo Date
+df_ngc$date <- as.Date(df_ngc$date)
+
+# Filtrar y preparar los datos para la visualización
+df_ngc_filtered <- df_ngc %>%
+  filter(!is.na(date) & !is.na(capacity) & !is.na(technology) & !is.na(country))
+
+# Generar el gráfico interactivo
+generate_plot <- function(country) {
+  filtered_data <- if (country == "Todos") {
+    df_ngc_filtered
+  } else {
+    df_ngc_filtered %>% filter(country == country)
+  }
+
+  p1 <- ggplot(filtered_data, aes(x = date, y = capacity, color = technology, group = technology)) +
+    geom_line() +
+    labs(title = paste("Evolución de la Generación de Energía en", country),
+         x = "Fecha", y = "Capacidad (MW)") +
+    theme_minimal()
+
+  ggplotly(p1)
+}
+
+# Guardar la visualización interactiva como HTML
+selected_country <- "Spain"  # Cambia esto al país que seleccionaste en la aplicación shiny
+p1_interactive <- generate_plot(selected_country)
+saveWidget(p1_interactive, "evolucion_generacion_por_pais.html", selfcontained = TRUE)
+```
+
+```{r eval=FALSE, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+# Asegurarse de que la columna `date` es de tipo Date
+df_ngc$date <- as.Date(df_ngc$date)
+
+# Filtrar y preparar los datos para la visualización
+df_ngc_filtered <- df_ngc %>%
+  filter(!is.na(date) & !is.na(capacity) & !is.na(technology) & !is.na(country))
+
+# Crear un gráfico interactivo para un país específico
+generate_plot <- function(data, country) {
+  filtered_data <- if (country == "Todos") {
+    data
+  } else {
+    data %>% filter(country == country)
+  }
+
+  p <- ggplot(filtered_data, aes(x = date, y = capacity, color = technology, group = technology)) +
+    geom_line() +
+    labs(title = paste("Evolución de la Generación de Energía en", country),
+         x = "Fecha", y = "Capacidad (MW)") +
+    theme_minimal()
+
+  ggplotly(p)
+}
+
+# Crear una lista de gráficos por país
+plots <- lapply(unique(df_ngc_filtered$country), function(country) {
+  list(country = country, plot = generate_plot(df_ngc_filtered, country))
+})
+
+# Guardar la visualización interactiva como HTML
+save_plot_html <- function(plots, filename) {
+  html <- "<html><head><title>Evolución de la Generación de Energía por País</title></head><body>"
+  html <- paste0(html, "<select id='countrySelector' onchange='updatePlot()'>")
+  html <- paste0(html, "<option value='Todos'>Todos</option>")
+  for (plot in plots) {
+    html <- paste0(html, "<option value='", plot$country, "'>", plot$country, "</option>")
+  }
+  html <- paste0(html, "</select>")
+  html <- paste0(html, "<div id='plotContainer'>", plotly::plotly_build(plots[[1]]$plot)$x$html, "</div>")
+  html <- paste0(html, "<script>
+    function updatePlot() {
+      var selector = document.getElementById('countrySelector');
+      var country = selector.value;
+      var plots = ", jsonlite::toJSON(plots, auto_unbox = TRUE), ";
+      var plotContainer = document.getElementById('plotContainer');
+      for (var i = 0; i < plots.length; i++) {
+        if (plots[i].country === country) {
+          plotContainer.innerHTML = plots[i].plot.x.html;
+          break;
+        }
+      }
+    }
+  </script>")
+  html <- paste0(html, "</body></html>")
+  write(html, file = filename)
+}
+
+save_plot_html(plots, "evolucion_generacion_por_pais_v4.html")
+```
+
+
+
+<br><hr><br>
+
+<span class="section"> Relación entre las Condiciones Meteorológicas y la generación de electicidad en España </span>
+
+```{r  message= FALSE, warning=FALSE, include=FALSE}
+
+df_sem$datetime <- as.POSIXct(df_sem$datetime, format="%Y-%m-%d %H:%M:%S")
+df_w$dt_iso <- as.POSIXct(df_w$dt_iso, format="%Y-%m-%d %H:%M:%S")
+
+# Unir los datasets por la columna de fecha y hora
+df_combined <- merge(df_sem, df_w, by.x = "datetime", by.y = "dt_iso")
+
+# Verificar los datos combinados
+head(df_combined)
+str(df_combined)
+
+```
+
+
+Una vez analizada la evolución, pasamos a explorar los factores climáticos que influyen en la generación de energía. La siguiente pregunta que abordamos es la **relación entre las condiciones meteorológicas y la producción energética**.
+
+Este gráfico de dispersión muestra **cómo la variable temperatura puede afectar en la generación de energía**. Por ejemplo, observamos que la energía eólica aumenta con temperaturas más bajas, ya que la densidad del aire es mayor en estas condiciones, lo que favorece al movimiento de los molinos. En contraposición **la energía solar tiene una fuerte correlación con temperaturas más altas**, ya que aunque sabemos que la temperatura no afecta directamente (de hecho la eficiencia en la fotovoltáica es menor), se corresponde con las épocas de verano donde la incidencia del sol es mayor. 
+
+Esto responde la pregunta de la **importancia de las condiciones meteorológicas en la planificación y operación de las plantas de energía**.
+
+Como observacion, **no se ha podido relacionar una disminución de la producción de energía no renovable dependiendo de la temperatura**, ya que la variación de la eólica tiende a compensar este factor. 
+
+<br>
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=15, fig.height=10}
+# Convertir las columnas de fecha a formato POSIXct
+df_sem$datetime <- as.POSIXct(df_sem$datetime, format="%Y-%m-%d %H:%M:%S")
+df_w$dt_iso <- as.POSIXct(df_w$dt_iso, format="%Y-%m-%d %H:%M:%S")
+
+# Unir los datasets por la columna de fecha y hora
+df_combined <- merge(df_sem, df_w, by.x = "datetime", by.y = "dt_iso")
+
+# Agrupar los datos por día y calcular los promedios
+df_combined <- df_combined %>%
+  mutate(date = as.Date(datetime)) %>%
+  group_by(date, name) %>%  # Agrupar también por tipo de generación
+  summarise(
+    avg_temp = mean(temp, na.rm = TRUE),
+    avg_humidity = mean(humidity, na.rm = TRUE),
+    avg_wind_speed = mean(wind_speed, na.rm = TRUE),
+    avg_value = mean(value, na.rm = TRUE)
+  )
+
+# Convertir la temperatura de Kelvin a grados Celsius
+df_combined <- df_combined %>%
+  mutate(avg_temp_celsius = avg_temp - 273.15)
+
+# Verificar los datos agregados y la nueva columna de temperatura en Celsius
+# head(df_combined)
+
+# Gráfico de dispersión interactivo para mostrar la relación entre temperatura promedio diaria en Celsius y precios de energía promedio diario
+p2 <- ggplot(df_combined, aes(x=avg_temp_celsius, y=avg_value, color=name)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Relación entre Temperatura Promedio Diaria (°C) y Precio Promedio Diario del Mercado de Energía",
+       x = "Temperatura Promedio Diaria (°C)", y = "Precio Promedio Diario de Energía") +
+  theme_minimal()
+
+# Convertir a objeto plotly para interactividad
+p2_interactive <- ggplotly(p2)
+
+# Personalizar el gráfico de dispersión interactivo
+p2_interactive <- ggplotly(p2) %>%
+  layout(
+    title = "Relación entre Temperatura Promedio Diaria (°C) y Precio Promedio Diario del Mercado de Energía",
+    xaxis = list(title = "Temperatura Promedio Diaria (°C)"),
+    yaxis = list(title = "Precio Promedio Diario de Energía"),
+    hovermode = "closest",
+    showlegend = TRUE
+  )
+
+# Mostrar el gráfico interactivo
+p2_interactive
+
+# Guardar la visualización interactiva como HTML
+saveWidget(p2_interactive, "relacion_temp_promedio_celsius_precio_promedio_energia_por_tipo.html")
+``` 
+
+<br><hr><br>
+
+<span class="section"> Tipo de potencia instalada por paises de la UE </span>
+
+La siguiente visualización se centra en la **capacidad instalada de producción de diferentes tipos de energía en la Union Europea**. Utilizamos un gráfico de barras apiladas para comparar la capacidad instalada entre los distintos países i sistemas de producción.
+
+Esta visualización nos permite **identificar qué tecnologías predominan en la generación de energía según los países**. Observamos que algunas tecnologías, como la nuclear, tiene una capacidad de generación mucho mayor en Francia que en el resto de países de la UE, mientras que otras, como la eólica, tienen mayor producción en España y Alemania.
+
+<br>
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=15, fig.height=10}
+
+# Crear un gráfico de barras apiladas interactivo con Plotly
+fig <- plot_ly(df_ngc, x = ~country, y = ~capacity, color = ~technology, type = 'bar', text = ~technology, hoverinfo = 'text+y', showlegend = TRUE)
+
+# Personalizar el gráfico interactivo
+fig <- fig %>%
+  layout(
+    barmode = 'stack',
+    title = "Capacidad de Generación por Tecnología y País",
+    xaxis = list(title = "País"),
+    yaxis = list(title = "Capacidad de Generación (MW)"),
+    hovermode = "closest"
+  )
+
+# Mostrar el gráfico interactivo
+fig
+
+# Guardar la visualización interactiva como HTML
+saveWidget(fig, "capacidad_generacion_tecnologia_pais_V2.html")
+
+```
+
+<br><hr><br>
+
+<span class="section"> Distribución de la capacidad instalada en el top 5 de la UE </span>
+
+Continuando con este análisis, presentamos el diagrama de Sankey, que muestra cómo se distribuye la capacidad instalada entre las tecnologías de generación en los cinco países que más aportan.
+
+Este diagrama de Sankey destaca **cómo se reparte la capacidad instalada entre los diferentes tipos de tecnología en los principales países contribuyentes**. España, Francia, Alemania, Italia y Reino Unido muestran **variaciones significativas en sus mix energéticos**, reflejando sus políticas energéticas y recursos naturales disponibles.
+
+Aqui se puede observar que en materia de **energías no renovables, Francia es la que menos dependencia tiene** de energías fósiles, debido a su alta capacidad de generación de energía Nuclear, en contraposición a Gran Bretaña, la cual va a la cola en la generación de nergías renovables.
+
+Respecto a las energías que representan a **España, si nos centramos en las renovables, podemos ver que es el país con más energía de este tipo** instalada respecto a su generación total. 
+La última información de fuentes oficiales dice que España tiene un 63% del total como energía renovable según [REE](https://www.sistemaelectrico-ree.es/informe-del-sistema-electrico/generacion/potencia-instalada)
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=15, fig.height=10}
+
+
+# Preparar los datos para el diagrama de Sankey
+sankey_data <- df_ngc %>%
+  filter(!is.na(country) & !is.na(technology) & !is.na(capacity)) %>%
+  group_by(country, technology) %>%
+  summarise(total_capacity = sum(capacity, na.rm = TRUE)) %>%
+  ungroup()
+
+# Identificar los cinco países principales por capacidad total
+top_countries <- sankey_data %>%
+  group_by(country) %>%
+  summarise(total_capacity = sum(total_capacity)) %>%
+  top_n(5, total_capacity) %>%
+  pull(country)
+
+# Filtrar los datos para incluir solo los cinco países principales
+sankey_data <- sankey_data %>%
+  filter(country %in% top_countries)
+
+# Crear nodos y enlaces para el diagrama de Sankey
+nodes <- unique(c(as.character(sankey_data$country), as.character(sankey_data$technology)))
+nodes <- data.frame(name = nodes)
+
+links <- sankey_data %>%
+  mutate(source = match(country, nodes$name) - 1,
+         target = match(technology, nodes$name) - 1) %>%
+  select(source, target, total_capacity)
+
+# Crear el diagrama de Sankey
+sankey <- sankeyNetwork(Links = links, Nodes = nodes, Source = "source", Target = "target", 
+                        Value = "total_capacity", NodeID = "name", units = "MW", fontSize = 12, nodeWidth = 30)
+
+# Guardar el diagrama de Sankey como HTML
+saveNetwork(sankey, "sankey_diagram_top5.html", selfcontained = TRUE)
+
+# Mostrar el diagrama de Sankey
+sankey
+```
+
+
+
+<hr><br>
+
+<span class="section"> Conclusión final</span>
+
+Como reflexión sobre los puntos clave, podemos observar que **tecnologías como la eólica y la solar han visto un crecimiento significativo** en potencia instalada, pero aún presentan **variaciones en eficiencia** dependiendo de factores externos. 
+
+Esto indica que, se debería asegurar un exceso para la potencia instalada necesaria para las renovables, y se puedan asegurar sistemas de almacenamiento energético como el sistema de almacenamiento por bombeo. Sin estas condiciones y, asumiendo que la energía Nuclear la consideramos como no renovable, **actualmente no es posible conseguir una independencia total de este tipo de energías**.
+
+<br><br><br>
+![](footer.jpg){width=100%}
